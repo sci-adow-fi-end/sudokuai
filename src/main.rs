@@ -1,12 +1,12 @@
-use crate::backtracking::backtrack;
+use crate::backtracking::{backtrack, preliminary_inference};
 use crate::problem::Sudoku;
-const NVAR:usize = 4;
-const BLOCKSIZE:u8 =2;
+const NVAR:usize = 9;
+const BLOCKSIZE:u8 =3;
 
 mod problem{
 
     use std::collections::HashSet;
-    use std::io;
+    use std::{fs, io};
     use std::io:: Write;
     use crate::NVAR;
 
@@ -160,6 +160,28 @@ mod problem{
             }
         }
 
+        pub fn fill_from_file(&mut self, path: &str){
+            let data = fs::read(path).unwrap();
+            let mut i=0;
+            let mut j=0;
+            for digit in data{
+                if digit>48 {
+                    self.set_variable((i,j),digit-48)
+                }
+                if digit!=10{
+                    j=j+1;
+                }
+
+                if j== NVAR as u8 {
+                    j=0;
+                    i=i+1;
+                }
+                if i== NVAR as u8 {
+                    break
+                }
+            }
+        }
+
         pub fn print(&self){
             for i in 0..NVAR{
                 for j in 0..NVAR{
@@ -186,7 +208,9 @@ mod problem{
 }
 
 mod backtracking{
-//    use std::time::Duration;
+    use std::thread::sleep;
+    use std::time::Duration;
+    //    use std::time::Duration;
 //    use std::thread::sleep;
     use crate::{BLOCKSIZE, NVAR};
 
@@ -253,19 +277,53 @@ mod backtracking{
             }
         }
 
+        for inference in &inferences{
+            for other_inference in  &inferences {
+
+
+                if inference!=other_inference && inference.1.len()==1 && other_inference.1.len()==1&&
+                    (inference.0.0==other_inference.0.0||inference.0.1==other_inference.0.1 ||
+                        (inference.0.0/BLOCKSIZE==other_inference.0.0/BLOCKSIZE &&
+                            inference.0.1/BLOCKSIZE==other_inference.0.1/BLOCKSIZE)){
+
+                            if inference.1[0]==other_inference.1[0] {
+                                inconsistency_found=true;
+                            }
+                }
+            }
+        }
+
+
+
         return if !inconsistency_found {
             Ok(inferences)
         } else {
-            println!("bla  ");
-            p.print();
             Err("Failure".to_string())
         }
 
     }
 
+    pub fn preliminary_inference(mut p: Sudoku)->Result<Sudoku,String>{
+        for variable in p.get_assignments(){
+            let inferences = inference(&p, variable);
+            let go = match inferences{
+                Ok(..)=>true,
+                Err(..)=>false
+            };
+            if go {
+                p.add_inferences(inferences.unwrap());
+            }
+            else{
+                return Err("Failure".to_string());
+            }
+        }
+        return Ok(p);
+
+    }
+
 
     pub fn backtrack(mut p: Sudoku,step:u32) -> Result<Sudoku,String>{
-        //qlet time = Duration::from_millis(1000);
+        let time = Duration::from_millis(1000);
         if p.get_assignments().len()+p.get_inferences().len()+p.get_unassigned_variables().len()!=NVAR*NVAR{
             panic!("I have got a mess")
         }
@@ -276,7 +334,8 @@ mod backtracking{
         println!("problem state is {:?},",p);
         println!(" ");
         if p.is_complete(){
-            return Ok(p);
+
+            return Ok(p)
         }
         let var = select_unassigned_variable(&p);
         for value  in order_domain_values(&p, var) {
@@ -311,7 +370,7 @@ mod backtracking{
 
         }
         println!("failure");
-        return Err("Failure0".to_string());
+        return Err("Failure".to_string());
 
     }
 }
@@ -322,7 +381,7 @@ mod backtracking{
 
 fn main() {
     let mut s =Sudoku::new();
-    s.fill();
+    s.fill_from_file("/home/alessio/RustroverProjects/sudoku_ai/src/sudoku.ini");
     println!("{:?}", backtrack(s,0).unwrap());
 
 }
